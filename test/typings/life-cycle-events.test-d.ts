@@ -1,4 +1,5 @@
 import { setupServer } from 'msw/node'
+import type { RequestHandler } from 'msw'
 import { setupWorker } from 'msw/browser'
 import {
   type HttpNetworkFrameEventMap,
@@ -57,7 +58,11 @@ test('annotates event listener argument (node)', () => {
     expectTypeOf(args).toExtend<{ request: Request; requestId: string }>()
   })
   server.events.on('request:match', (args) => {
-    expectTypeOf(args).toExtend<{ request: Request; requestId: string }>()
+    expectTypeOf(args).toExtend<{
+      request: Request
+      requestId: string
+      handler: RequestHandler
+    }>()
   })
   server.events.on('request:unhandled', (args) => {
     expectTypeOf(args).toExtend<{ request: Request; requestId: string }>()
@@ -97,7 +102,11 @@ test('annotates event listener argument (browser)', () => {
     expectTypeOf(args).toExtend<{ request: Request; requestId: string }>()
   })
   worker.events.on('request:match', (args) => {
-    expectTypeOf(args).toExtend<{ request: Request; requestId: string }>()
+    expectTypeOf(args).toExtend<{
+      request: Request
+      requestId: string
+      handler: RequestHandler
+    }>()
   })
   worker.events.on('request:unhandled', (args) => {
     expectTypeOf(args).toExtend<{ request: Request; requestId: string }>()

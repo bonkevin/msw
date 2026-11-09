@@ -81,15 +81,12 @@ test('resolves a matching request', async () => {
   const { events } = spyOnNetworkFrame(frame)
   const unhandledFrameCallback = vi.fn()
 
-  const matches = await frame.resolve(
-    [
-      http.get('http://localhost/api', () => {
-        return new Response(null, { status: 204 })
-      }),
-    ],
-    unhandledFrameCallback,
-    { quiet: true },
-  )
+  const handler = http.get('http://localhost/api', () => {
+    return new Response(null, { status: 204 })
+  })
+  const matches = await frame.resolve([handler], unhandledFrameCallback, {
+    quiet: true,
+  })
 
   expect.soft(matches).toBe(true)
   expect.soft(frame.respondWith).toHaveBeenCalledExactlyOnceWith(
@@ -108,6 +105,7 @@ test('resolves a matching request', async () => {
     }),
     expect.objectContaining({
       type: 'request:match',
+      handler,
       requestId: frame.data.id,
       request: frame.data.request,
     }),
@@ -231,15 +229,12 @@ test('resolves a matched passthrough', async () => {
   const { events } = spyOnNetworkFrame(frame)
   const unhandledFrameCallback = vi.fn()
 
-  const matches = await frame.resolve(
-    [
-      http.get('http://localhost/api', () => {
-        // Intentionally do nothing to passthrough.
-      }),
-    ],
-    unhandledFrameCallback,
-    { quiet: true },
-  )
+  const handler = http.get('http://localhost/api', () => {
+    // Intentionally do nothing to passthrough.
+  })
+  const matches = await frame.resolve([handler], unhandledFrameCallback, {
+    quiet: true,
+  })
 
   expect.soft(matches).toBeNull()
   expect.soft(frame.passthrough).toHaveBeenCalledOnce()
@@ -254,6 +249,7 @@ test('resolves a matched passthrough', async () => {
     }),
     expect.objectContaining({
       type: 'request:match',
+      handler,
       requestId: frame.data.id,
       request: frame.data.request,
     }),
@@ -263,6 +259,60 @@ test('resolves a matched passthrough', async () => {
       request: frame.data.request,
     }),
   ])
+})
+
+test('exposes the responding handler on the "request:match" event', async () => {
+  class HttpFrame extends HttpNetworkFrame {
+    respondWith = vi.fn()
+    passthrough = vi.fn()
+    errorWith = vi.fn()
+  }
+
+  const frame = new HttpFrame({
+    request: new Request('http://localhost/api'),
+  })
+  const { events } = spyOnNetworkFrame(frame)
+
+  const fallthroughHandler = http.get('http://localhost/api', () => {
+    // Intentionally do nothing to fall through.
+  })
+  const respondingHandler = http.get('http://localhost/api', () => {
+    return new Response(null, { status: 204 })
+  })
+  const unusedHandler = http.get('http://localhost/api', () => {
+    return new Response(null, { status: 500 })
+  })
+
+  await frame.resolve(
+    [fallthroughHandler, respondingHandler, unusedHandler],
+    vi.fn(),
+    { quiet: true },
+  )
+
+  const matchEvents = events.filter((event) => event.type === 'request:match')
+  expect(matchEvents).toHaveLength(1)
+  expect(matchEvents[0]).toHaveProperty('handler', respondingHandler)
+})
+
+test('does not emit "request:match" for a non-matching request', async () => {
+  class HttpFrame extends HttpNetworkFrame {
+    respondWith = vi.fn()
+    passthrough = vi.fn()
+    errorWith = vi.fn()
+  }
+
+  const frame = new HttpFrame({
+    request: new Request('http://localhost/api'),
+  })
+  const { events } = spyOnNetworkFrame(frame)
+
+  await frame.resolve(
+    [http.get('http://localhost/other', () => new Response())],
+    vi.fn(),
+    { quiet: true },
+  )
+
+  expect(events.map((event) => event.type)).not.toContain('request:match')
 })
 
 test('resolves a bypassed request', async () => {
